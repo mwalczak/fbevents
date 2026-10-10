@@ -25,33 +25,22 @@ jobs:
       - run: python -m pytest -q
 
   # Only main is deployed, and only after the tests pass.
-  deploy:
+  settings:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check secrets
-        id: check
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          FB_AUTH_JSON: ${{ secrets.FB_AUTH_JSON }}
-          CONFIG_TOML: ${{ vars.CONFIG_TOML }}
-        run: |
-          missing=""
-          for s in VPS_HOST VPS_SSH_KEY SMTP_PASSWORD FB_AUTH_JSON CONFIG_TOML; do [ -n "${!s}" ] || missing="$missing $s"; done
-          if [ -n "$missing" ]; then
-            echo "::warning::Building only, not deploying: add these repository secrets/variables first:$missing"
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
+    uses: ./.github/workflows/update-settings.yml
+    secrets: inherit
 
+  deploy:
+    needs: settings
+    runs-on: ubuntu-latest
+    env:
+      READY: ${{ needs.settings.outputs.ready }}
+    steps:
       - uses: actions/checkout@v4
 
       - name: Log in to GHCR
-        if: steps.check.outputs.ready == 'true'
+        if: env.READY == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -63,51 +52,21 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ steps.check.outputs.ready == 'true' }}
+          push: ${{ env.READY == 'true' }}
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
 
       - name: Set up SSH
-        if: steps.check.outputs.ready == 'true'
+        if: env.READY == 'true'
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Check settings
-        if: steps.check.outputs.ready == 'true'
-        env:
-          CONFIG_TOML: ${{ vars.CONFIG_TOML }}
-          FB_AUTH_JSON: ${{ secrets.FB_AUTH_JSON }}
-        run: |
-          printf '%s\n' "$CONFIG_TOML" > /tmp/config.toml
-          python3 -c "from fbevents.config import Config; Config.load('/tmp/config.toml')"
-          python3 -c "import json, os; json.loads(os.environ['FB_AUTH_JSON'])" \
-            || { echo "::error::FB_AUTH_JSON is not valid JSON: paste the whole state/auth.json"; exit 1; }
-          rm /tmp/config.toml
-
-      - name: Update settings and Facebook session
-        if: steps.check.outputs.ready == 'true'
-        env:
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          FB_AUTH_JSON: ${{ secrets.FB_AUTH_JSON }}
-          CONFIG_TOML: ${{ vars.CONFIG_TOML }}
-        run: |
-          dir=$(mktemp -d)
-          printf '%s\n' "$CONFIG_TOML" > "$dir/config.toml"
-          printf '%s\n' "$FB_AUTH_JSON" > "$dir/auth.json"
-          kubectl create secret generic fbevents \
-              --from-file=config.toml="$dir/config.toml" \
-              --from-file=auth.json="$dir/auth.json" \
-              --from-literal=SMTP_PASSWORD="$SMTP_PASSWORD" \
-              --dry-run=client -o yaml \
-            | ssh debian@${{ secrets.VPS_HOST }} 'KUBECONFIG=$HOME/.kube/config kubectl apply -f -'
-          rm -rf "$dir"
-
       - name: Deploy to k3s
-        if: steps.check.outputs.ready == 'true'
+        if: env.READY == 'true'
         run: |
           sed "s|IMAGE_PLACEHOLDER|${IMAGE}:${GITHUB_SHA}|" k8s.yaml \
             | ssh debian@${{ secrets.VPS_HOST }} 'KUBECONFIG=$HOME/.kube/config kubectl apply -f -'

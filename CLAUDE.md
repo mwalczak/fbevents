@@ -12,6 +12,7 @@ See README.md for what it does and how it's deployed.
   `FBEVENTS_CHROMIUM=/opt/pw-browsers/chromium` (picked up automatically if that path exists).
 - Deploy: push to `main` → GitHub Actions builds the image and applies `k8s.yaml` on the k3s server
   (same pattern as mwalczak/mobile-scores). Settings come from the `CONFIG_TOML` repo variable,
-  never from committed files. Never commit `config.toml` or anything under `state/`.
+  never from committed files; `update-settings.yml` copies them (and the secrets) into the k8s
+  Secret, standalone or called from `deploy.yml`. Never commit `config.toml` or anything under `state/`.
 - Keep the load on Facebook low: no retries (`backoffLimit: 0`), pauses between pages, a cap on
   event pages per run. Don't add parallelism.

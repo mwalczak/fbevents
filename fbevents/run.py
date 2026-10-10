@@ -21,8 +21,8 @@ To fix it, on your computer in the fbevents folder:
   .venv/bin/python -m fbevents login
 
 then paste the contents of state/auth.json into the FB_AUTH_JSON secret on GitHub
-(https://github.com/mwalczak/fbevents/settings/secrets/actions) and re-run the
-"Test and deploy" workflow.
+(https://github.com/mwalczak/fbevents/settings/secrets/actions) and run the
+"Update settings" workflow.
 
 Page that asked for the login: {url}
 """

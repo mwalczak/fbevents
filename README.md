@@ -95,10 +95,12 @@ log, ending with the list of events it would send. Nothing is emailed or remembe
 
 ## Day to day
 
-- **Change settings**: edit the `CONFIG_TOML` variable on GitHub, then re-run **Test and
-  deploy**.
-- **"please log in again" email**: repeat step 1 (`login`, then paste the new `state/auth.json` into the `FB_AUTH_JSON` secret) and
-  re-run **Test and deploy**. A newly uploaded session replaces the one on the server.
+- **Change settings**: edit the `CONFIG_TOML` variable on GitHub, then run **Actions →
+  Update settings** (about 20 seconds). It copies the settings to the server; the next run
+  uses them. **Test and deploy** does the same as part of every deploy.
+- **"please log in again" email**: repeat step 1 (`login`, then paste the new
+  `state/auth.json` into the `FB_AUTH_JSON` secret) and run **Update settings**. A newly
+  uploaded session replaces the one on the server.
 - **"the daily run failed" email**: it contains the error; look at the log too (below).
 - **Logs on the server**:
   `kubectl logs job/<name>` for the last few jobs (`kubectl get jobs`), or
