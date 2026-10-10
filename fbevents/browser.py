@@ -1,0 +1,158 @@
+"""The one part that talks to Facebook: a headless Chromium with your saved session."""
+
+import json
+import logging
+import random
+import re
+import time
+from urllib.parse import urlparse
+
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import sync_playwright
+
+from .extract import collect_links, page_title
+
+log = logging.getLogger("fbevents")
+
+LAUNCH_ARGS = ["--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"]
+
+
+class LoginRequired(Exception):
+    pass
+
+
+def _user_agent(cfg, browser):
+    if cfg.user_agent:
+        return cfg.user_agent
+    major = browser.version.split(".")[0]
+    return (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        f"Chrome/{major}.0.0.0 Safari/537.36"
+    )
+
+
+def _launch(pw, cfg, headless):
+    opts = {"headless": headless, "args": LAUNCH_ARGS}
+    if cfg.chromium_path:
+        opts["executable_path"] = cfg.chromium_path
+    elif headless:
+        opts["channel"] = "chromium"  # the full browser in new headless mode, not headless-shell
+    return pw.chromium.launch(**opts)
+
+
+def _context_options(cfg, browser):
+    return {
+        "user_agent": _user_agent(cfg, browser),
+        "locale": cfg.locale,
+        "timezone_id": cfg.timezone,
+        "viewport": {"width": 1366, "height": 900},
+    }
+
+
+def save_session(context, path):
+    """Keep only cookies: that is the whole Facebook login, and it stays small enough for a
+    GitHub secret."""
+    state = context.storage_state()
+    state["origins"] = []
+    path.write_text(json.dumps(state, indent=1))
+
+
+class Facebook:
+    def __init__(self, cfg, auth_path):
+        self.cfg = cfg
+        self.auth_path = auth_path
+        self.pages_opened = 0
+
+    def __enter__(self):
+        self._pw = sync_playwright().start()
+        try:
+            self.browser = _launch(self._pw, self.cfg, self.cfg.headless)
+            self.context = self.browser.new_context(
+                storage_state=str(self.auth_path), **_context_options(self.cfg, self.browser)
+            )
+            self.context.set_default_timeout(45_000)
+            self.page = self.context.new_page()
+        except Exception:
+            self._pw.stop()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            self.browser.close()
+        finally:
+            self._pw.stop()
+
+    def save_session(self):
+        save_session(self.context, self.auth_path)
+
+    def _pause(self):
+        if self.pages_opened:
+            lo, hi = self.cfg.pause_seconds
+            time.sleep(random.uniform(lo, hi))
+        self.pages_opened += 1
+
+    def _check_logged_in(self):
+        path = urlparse(self.page.url).path
+        if re.search(r"^/(login|checkpoint|recover)", path) or self.page.locator(
+            'input[name="pass"]'
+        ).count():
+            raise LoginRequired(self.page.url)
+
+    def _goto(self, url):
+        self._pause()
+        log.debug("open %s", url)
+        resp = self.page.goto(url, wait_until="domcontentloaded")
+        try:
+            self.page.wait_for_load_state("load", timeout=15_000)
+        except PlaywrightError:
+            pass
+        self.page.wait_for_timeout(random.uniform(1500, 3000))
+        self._check_logged_in()
+        if resp is not None and resp.status >= 400:
+            raise RuntimeError(f"HTTP {resp.status} for {url}")
+        return resp
+
+    def listing(self, url, scrolls):
+        """Event links on a Page's events tab or a city's events page.
+        Returns (page title, {event_id: {"url", "card"}})."""
+        self._goto(url)
+        for _ in range(scrolls):
+            self.page.mouse.wheel(0, random.randint(1800, 2600))
+            self.page.wait_for_timeout(random.uniform(1500, 2800))
+        anchors = self.page.eval_on_selector_all(
+            'a[href*="/events/"]',
+            "els => els.map(e => [e.getAttribute('href'),"
+            " [e.innerText, e.getAttribute('aria-label')].filter(Boolean).join('\\n')])",
+        )
+        return page_title(self.page.title()), collect_links(self.page.url, anchors)
+
+    def event_html(self, url):
+        """Raw HTML of an event page (it carries the event data as JSON), plus the DOM."""
+        resp = self._goto(url)
+        raw = ""
+        try:
+            raw = resp.text() if resp is not None else ""
+        except PlaywrightError:
+            pass
+        return raw + "\n" + self.page.content()
+
+
+def interactive_login(cfg, auth_path):
+    """Open a visible browser, let the person log in, save the session cookies."""
+    with sync_playwright() as pw:
+        browser = _launch(pw, cfg, headless=False)
+        opts = _context_options(cfg, browser)
+        if auth_path.exists():
+            opts["storage_state"] = str(auth_path)
+        context = browser.new_context(**opts)
+        page = context.new_page()
+        page.goto("https://www.facebook.com/login")
+        input("\nLog in to Facebook in the browser window (finish any 2FA check),\n"
+              "wait until you see your feed, then press Enter here... ")
+        cookies = {c["name"] for c in context.cookies("https://www.facebook.com")}
+        if "c_user" not in cookies:
+            browser.close()
+            raise SystemExit("Not logged in yet (no c_user cookie). Nothing saved; try again.")
+        save_session(context, auth_path)
+        browser.close()

@@ -1,0 +1,7 @@
+.git
+.github
+.venv
+state
+tests
+config.toml
+*.md

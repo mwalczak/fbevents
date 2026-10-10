@@ -1,0 +1,48 @@
+name: Run now
+
+# Starts one run of the daily CronJob right away (no random wait) and shows its log.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: only print the events, send and remember nothing"
+        type: boolean
+        default: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Start the job and follow its log
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          k() { ssh debian@${{ secrets.VPS_HOST }} "KUBECONFIG=\$HOME/.kube/config kubectl $(printf '%q ' "$@")"; }
+          name="fbevents-manual-$(date +%s)"
+          args='["run","--no-delay"]'
+          [ "$DRY_RUN" = "true" ] && args='["run","--no-delay","--dry-run"]'
+          k get cronjob fbevents -o json \
+            | jq --arg name "$name" --argjson args "$args" '
+                {apiVersion: "batch/v1", kind: "Job", metadata: {name: $name},
+                 spec: (.spec.jobTemplate.spec | .template.spec.containers[0].args = $args)}' \
+            | k apply -f -
+          # The first run pulls a large image, so give the pod time to start.
+          for i in $(seq 1 60); do
+            phase=$(k get pods -l "job-name=$name" -o 'jsonpath={.items[0].status.phase}' 2>/dev/null || true)
+            [ -n "$phase" ] && [ "$phase" != "Pending" ] && break
+            sleep 10
+          done
+          k logs -f "job/$name" || true
+          for i in $(seq 1 30); do
+            done_=$(k get "job/$name" -o 'jsonpath={.status.succeeded}{.status.failed}')
+            [ -n "$done_" ] && break
+            sleep 2
+          done
+          k get "job/$name" -o 'jsonpath={.status.succeeded}' | grep -q 1

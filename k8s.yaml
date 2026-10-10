@@ -1,0 +1,58 @@
+# Seen events and the refreshed Facebook session live on this volume between runs.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fbevents-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fbevents
+spec:
+  schedule: "15 7 * * *" # the app then waits a random 0-30 min before opening Facebook
+  timeZone: Europe/Warsaw
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0 # no retries: a failed run waits for tomorrow instead of hitting Facebook again
+      activeDeadlineSeconds: 5400
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 1000
+            fsGroup: 1000
+          containers:
+            - name: fbevents
+              image: IMAGE_PLACEHOLDER
+              args: ["run"]
+              env:
+                - name: SMTP_PASSWORD
+                  valueFrom: { secretKeyRef: { name: fbevents, key: SMTP_PASSWORD } }
+              volumeMounts:
+                - { name: data, mountPath: /data }
+                - { name: settings, mountPath: /etc/fbevents, readOnly: true }
+                - { name: shm, mountPath: /dev/shm }
+              resources:
+                requests: { cpu: 100m, memory: 384Mi }
+                limits: { memory: 1536Mi }
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: fbevents-data
+            - name: settings
+              secret:
+                secretName: fbevents
+                items:
+                  - { key: config.toml, path: config.toml }
+                  - { key: auth.json, path: auth.json }
+            - name: shm
+              emptyDir: { medium: Memory, sizeLimit: 256Mi }

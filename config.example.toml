@@ -1,0 +1,38 @@
+# Copy to config.toml for local runs. On the server this whole file is the
+# CONFIG_TOML repository variable (GitHub → Settings → Secrets and variables → Actions → Variables).
+
+[location]
+city = "Gdańsk"            # looked up on OpenStreetMap once; or set latitude/longitude below
+# latitude = 54.352
+# longitude = 18.646
+radius_km = 30             # "nearby" events farther than this are skipped
+timezone = "Europe/Warsaw"
+
+[sources]
+# Pages whose events you always want: paste the Page address as it is in the browser.
+pages = [
+  "https://www.facebook.com/SomeVenue",
+  # "https://www.facebook.com/profile.php?id=100064000000000",
+]
+# Your town's events page: open facebook.com/events, pick the town in the location
+# filter and copy the address. Add neighbouring towns if you like.
+city_urls = [
+  # "https://www.facebook.com/events/explore/gdansk/108153709211375/",
+]
+pages_use_radius = false   # true = apply radius_km to events from your Pages too
+
+[email]
+smtp_host = "smtp.gmail.com"
+smtp_port = 587            # 465 for SSL
+username = "you@gmail.com"
+# password: set the SMTP_PASSWORD environment variable (a Gmail App Password)
+to = ["you@gmail.com"]
+send_when_empty = false    # true = also mail "No new events today"
+
+[browser]
+locale = "pl-PL"
+max_event_pages = 40       # new event pages opened per run at most; the rest wait for the next run
+# pause_seconds = [4, 12]  # random pause between pages
+# start_delay_minutes = 30 # random wait before starting (skip with run --no-delay)
+# user_agent = ""          # default: desktop Chrome on Linux, same version as the bundled browser
+# chromium_path = ""       # use another Chromium binary

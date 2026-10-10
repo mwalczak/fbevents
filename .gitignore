@@ -1,0 +1,7 @@
+# your settings and Facebook session: never commit these
+config.toml
+state/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
