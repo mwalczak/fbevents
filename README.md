@@ -50,7 +50,9 @@ Copy `config.example.toml` to `config.toml` and fill it in:
 - **Pages**: open the venue's Page in a browser and paste its address, e.g.
   `https://www.facebook.com/SomeVenue`. `profile.php?id=…` addresses work as they are.
 - **City URL**: go to facebook.com/events, choose your town in the location filter and copy
-  the address (`https://www.facebook.com/events/explore/<town>/<number>/`). You can add
+  the address, e.g.
+  `https://www.facebook.com/events/?discover_tab=RECOMMENDED&location_id=106151156083618`
+  (older links look like `/events/explore/<town>/<number>/`; both work). You can add
   neighbouring towns. "Nearby" events farther than `radius_km` from `city` are skipped.
   Events from your Pages are always included, whatever the distance, unless you set
   `pages_use_radius = true`.

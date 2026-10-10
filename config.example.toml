@@ -17,7 +17,7 @@ pages = [
 # Your town's events page: open facebook.com/events, pick the town in the location
 # filter and copy the address. Add neighbouring towns if you like.
 city_urls = [
-  # "https://www.facebook.com/events/explore/gdansk/108153709211375/",
+  # "https://www.facebook.com/events/?discover_tab=RECOMMENDED&location_id=106151156083618",
 ]
 pages_use_radius = false   # true = apply radius_km to events from your Pages too
 
