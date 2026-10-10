@@ -19,9 +19,10 @@ LOGIN_HELP = """Facebook asked for a login, so no events were collected today.
 To fix it, on your computer in the fbevents folder:
 
   .venv/bin/python -m fbevents login
-  gh secret set FB_AUTH_JSON < state/auth.json
 
-then re-run the "Test and deploy" workflow on GitHub (or wait for the next push).
+then paste the contents of state/auth.json into the FB_AUTH_JSON secret on GitHub
+(https://github.com/mwalczak/fbevents/settings/secrets/actions) and re-run the
+"Test and deploy" workflow.
 
 Page that asked for the login: {url}
 """

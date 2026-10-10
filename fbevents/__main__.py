@@ -36,8 +36,8 @@ def main(argv=None):
         cfg = Config.load(args.config, required=False)
         interactive_login(cfg, state.auth)
         print(f"\nSaved {state.auth}. Treat it like a password.\n"
-              "To use it on the server:  gh secret set FB_AUTH_JSON < " + str(state.auth) +
-              "\nthen re-run the 'Test and deploy' workflow.")
+              "To use it on the server, paste its contents into the FB_AUTH_JSON secret on GitHub\n"
+              "(Settings -> Secrets and variables -> Actions), then re-run 'Test and deploy'.")
         return 0
 
     cfg = Config.load(args.config)

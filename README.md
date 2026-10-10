@@ -36,10 +36,12 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m playwright install chromium
 .venv/bin/python -m fbevents login        # log in, finish any 2FA check, press Enter
-gh secret set FB_AUTH_JSON < state/auth.json
 ```
 
-`state/auth.json` is your Facebook session. Treat it like a password; it is git-ignored.
+This saves your Facebook session in `state/auth.json`. Treat it like a password; it is
+git-ignored. Open it in a text editor, copy everything, and save it as the `FB_AUTH_JSON`
+secret on GitHub: [Settings → Secrets and variables → Actions](https://github.com/mwalczak/fbevents/settings/secrets/actions) →
+**Secrets** tab → **New repository secret** (or edit the existing one), paste, save.
 
 ### 2. Settings
 
@@ -54,13 +56,15 @@ Copy `config.example.toml` to `config.toml` and fill it in:
   `pages_use_radius = true`.
 - **Email**: for Gmail, create an [App Password](https://myaccount.google.com/apppasswords).
 
-Then upload it as a repository variable (variables, unlike secrets, can be viewed and
-edited later on GitHub):
+Then put it on GitHub, on the same [Settings → Secrets and variables → Actions](https://github.com/mwalczak/fbevents/settings/secrets/actions)
+page:
 
-```sh
-gh variable set CONFIG_TOML < config.toml
-gh secret set SMTP_PASSWORD               # paste the app password
-```
+- **Variables** tab → **New repository variable**: name `CONFIG_TOML`, paste the whole
+  `config.toml`. Variables, unlike secrets, can be viewed and edited later.
+- **Secrets** tab → **New repository secret**: name `SMTP_PASSWORD`, paste the app password.
+
+(With the GitHub CLI the same is `gh variable set CONFIG_TOML < config.toml`,
+`gh secret set SMTP_PASSWORD` and `gh secret set FB_AUTH_JSON < state/auth.json`.)
 
 ### 3. Deploy
 
@@ -91,7 +95,7 @@ log, ending with the list of events it would send. Nothing is emailed or remembe
 
 - **Change settings**: edit the `CONFIG_TOML` variable on GitHub, then re-run **Test and
   deploy**.
-- **"please log in again" email**: repeat step 1 (`login` + `gh secret set FB_AUTH_JSON`) and
+- **"please log in again" email**: repeat step 1 (`login`, then paste the new `state/auth.json` into the `FB_AUTH_JSON` secret) and
   re-run **Test and deploy**. A newly uploaded session replaces the one on the server.
 - **"the daily run failed" email**: it contains the error; look at the log too (below).
 - **Logs on the server**:
