@@ -44,8 +44,12 @@ class Config:
             if required:
                 raise SystemExit(f"Config file {path} not found. Copy config.example.toml to it.")
             return cls(smtp_password=os.environ.get("SMTP_PASSWORD", ""))
-        with open(path, "rb") as f:
-            raw = tomllib.load(f)
+        try:
+            with open(path, "rb") as f:
+                raw = tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            raise SystemExit(f"{path} (the CONFIG_TOML variable on the server) is not valid TOML: {e}."
+                             " Text needs quotes, decimals use a dot, one value per line.")
         loc, src = raw.get("location", {}), raw.get("sources", {})
         mail, br = raw.get("email", {}), raw.get("browser", {})
         to = mail.get("to", [])

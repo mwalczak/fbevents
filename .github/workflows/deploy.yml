@@ -76,6 +76,18 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
+      - name: Check settings
+        if: steps.check.outputs.ready == 'true'
+        env:
+          CONFIG_TOML: ${{ vars.CONFIG_TOML }}
+          FB_AUTH_JSON: ${{ secrets.FB_AUTH_JSON }}
+        run: |
+          printf '%s\n' "$CONFIG_TOML" > /tmp/config.toml
+          python3 -c "from fbevents.config import Config; Config.load('/tmp/config.toml')"
+          python3 -c "import json, os; json.loads(os.environ['FB_AUTH_JSON'])" \
+            || { echo "::error::FB_AUTH_JSON is not valid JSON: paste the whole state/auth.json"; exit 1; }
+          rm /tmp/config.toml
+
       - name: Update settings and Facebook session
         if: steps.check.outputs.ready == 'true'
         env:
