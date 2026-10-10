@@ -102,3 +102,15 @@ def test_new_secret_replaces_saved_session(tmp_path):
     seed.write_text("new login")
     state.seed_auth(seed)
     assert state.auth.read_text() == "new login"
+
+
+def test_empty_page_says_what_facebook_showed(fake, tmp_path, sent, caplog):
+    cfg, state, seed = make(fake, tmp_path)
+    fake.pages["/gone/upcoming_hosted_events"] = (
+        "<html><head><title>Facebook</title></head><body><div role=main>"
+        "<h2>This content isn't available right now</h2></div></body></html>")
+    cfg.pages, cfg.city_urls = [fake.url + "/gone"], []
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert "no city_urls in the config" in caplog.text
+    assert "/gone/upcoming_hosted_events" in caplog.text
+    assert "This content isn't available right now" in caplog.text

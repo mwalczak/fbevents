@@ -125,7 +125,15 @@ class Facebook:
             "els => els.map(e => [e.getAttribute('href'),"
             " [e.innerText, e.getAttribute('aria-label')].filter(Boolean).join('\\n')])",
         )
-        return page_title(self.page.title()), collect_links(self.page.url, anchors)
+        links = collect_links(self.page.url, anchors)
+        if not links:
+            # Say what Facebook showed instead, e.g. "This content isn't available right now".
+            heading = self.page.evaluate(
+                "() => (document.querySelector('[role=main] h1, [role=main] h2, h1, h2')"
+                " || {}).innerText || ''")
+            log.warning("no events on %s (ended up at %s, heading: %r)",
+                        url, self.page.url, " ".join(heading.split())[:120])
+        return page_title(self.page.title()), links
 
     def event_html(self, url):
         """Raw HTML of an event page (it carries the event data as JSON), plus the DOM."""

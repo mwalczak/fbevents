@@ -70,6 +70,9 @@ def alert(cfg, state, key, subj, text, dry_run):
 def collect(fb, cfg):
     """{event_id: {"url", "card", "sources": [(kind, name)]}} from all listing pages."""
     found = {}
+    log.info("checking %d Pages and %d town pages", len(cfg.pages), len(cfg.city_urls))
+    if not cfg.city_urls:
+        log.warning("no city_urls in the config, so no nearby events")
 
     def add(links, kind, name):
         for eid, link in links.items():
@@ -87,7 +90,7 @@ def collect(fb, cfg):
         except Exception as e:  # noqa: BLE001 - one broken Page shouldn't stop the run
             log.warning("page %s failed: %s", url, e)
             continue
-        log.info("page %s: %d events", title or url, len(links))
+        log.info("page %s (%s): %d events", title or url, url, len(links))
         add(links, "page", title or url)
     for url in cfg.city_urls:
         try:
@@ -97,7 +100,7 @@ def collect(fb, cfg):
         except Exception as e:  # noqa: BLE001
             log.warning("city page %s failed: %s", url, e)
             continue
-        log.info("nearby %s: %d events", title or url, len(links))
+        log.info("nearby %s (%s): %d events", title or url, url, len(links))
         add(links, "nearby", title or url)
     return found
 
