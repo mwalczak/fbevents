@@ -44,9 +44,12 @@ class Config:
             if required:
                 raise SystemExit(f"Config file {path} not found. Copy config.example.toml to it.")
             return cls(smtp_password=os.environ.get("SMTP_PASSWORD", ""))
+        # Text pasted from a browser or Google Maps can carry invisible characters
+        # (non-breaking spaces, zero-width spaces, a byte-order mark) that TOML rejects.
+        text = path.read_text(encoding="utf-8-sig")
+        text = text.replace("\u00a0", " ").replace("\u202f", " ").replace("\u200b", "")
         try:
-            with open(path, "rb") as f:
-                raw = tomllib.load(f)
+            raw = tomllib.loads(text)
         except tomllib.TOMLDecodeError as e:
             raise SystemExit(f"{path} (the CONFIG_TOML variable on the server) is not valid TOML: {e}."
                              " Text needs quotes, decimals use a dot, one value per line.")

@@ -78,3 +78,12 @@ def test_page_title_and_distance():
     assert page_title("(3) The Venue | Facebook") == "The Venue"
     assert page_title("") is None
     assert 78 < distance_km(54.35, 18.65, 55.07, 18.65) < 82
+
+
+def test_config_ignores_pasted_invisible_characters(tmp_path):
+    from fbevents.config import Config
+    p = tmp_path / "config.toml"
+    p.write_text('﻿[location]\ncity = "Rybnik"\nlatitude = 50.09713 \n'
+                 'longitude = 18.54179​\n', encoding="utf-8")
+    c = Config.load(p)
+    assert (c.city, c.latitude, c.longitude) == ("Rybnik", 50.09713, 18.54179)
