@@ -42,14 +42,13 @@ jobs:
           missing=""
           for s in VPS_HOST VPS_SSH_KEY SMTP_PASSWORD FB_AUTH_JSON CONFIG_TOML; do [ -n "${!s}" ] || missing="$missing $s"; done
           if [ -n "$missing" ]; then
-            echo "::warning::Not deploying: add these repository secrets/variables first:$missing"
+            echo "::warning::Building only, not deploying: add these repository secrets/variables first:$missing"
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@v4
-        if: steps.check.outputs.ready == 'true'
 
       - name: Log in to GHCR
         if: steps.check.outputs.ready == 'true'
@@ -59,12 +58,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Always built on main so a broken Dockerfile shows up even before the secrets are set.
       - name: Build and push image
-        if: steps.check.outputs.ready == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ steps.check.outputs.ready == 'true' }}
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
