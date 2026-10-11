@@ -162,10 +162,13 @@ class Facebook:
         for _ in range(scrolls):
             self.page.mouse.wheel(0, random.randint(1800, 2600))
             self.page.wait_for_timeout(random.uniform(1500, 2800))
-        anchors = self.page.eval_on_selector_all(
-            'a[href*="/events/"]',
-            "els => els.map(e => [e.getAttribute('href'),"
-            " [e.innerText, e.getAttribute('aria-label')].filter(Boolean).join('\\n')])",
+        # Only the page's own content: Facebook's menus and sidebars around it link to events
+        # too (e.g. ones you're going to), which would otherwise show up on every Page.
+        anchors = self.page.evaluate(
+            "() => [...(document.querySelector('[role=main]') || document)"
+            ".querySelectorAll('a[href*=\"/events/\"]')]"
+            ".map(e => [e.getAttribute('href'),"
+            " [e.innerText, e.getAttribute('aria-label')].filter(Boolean).join('\\n')])"
         )
         links = collect_links(self.page.url, anchors)
         if not links:

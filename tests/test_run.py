@@ -58,6 +58,7 @@ def test_daily_run(fake, tmp_path, sent):
     assert set(json.loads(state.seen_file.read_text())) == {"111111", "222222", "444444", "555555"}
     assert state.auth.exists()
     assert not [p for p in fake.requests if p.startswith("/img/")]  # pictures and videos skipped
+    assert not [p for p in fake.requests if "999999" in p]  # Facebook's sidebar is not a Page's event
 
     # Next day: nothing new, no email, and no event pages opened again.
     fake.requests.clear()
@@ -68,7 +69,7 @@ def test_daily_run(fake, tmp_path, sent):
     # A new event shows up on the Page.
     fake.events["666666"] = ("New gig", fake.now + 9 * 86400, "The Venue", 54.36, 18.64)
     fake.pages["/venue/upcoming_hosted_events"] = fake.pages[
-        "/venue/upcoming_hosted_events"].replace("</body>", '<a href="/events/666666/">New</a></body>')
+        "/venue/upcoming_hosted_events"].replace("</div></body>", '<a href="/events/666666/">New</a></div></body>')
     assert run(cfg, state, delay=False, auth_seed=seed) == 0
     assert sent[-1][0] == "1 new event near you" and "New gig" in sent[-1][1]
 

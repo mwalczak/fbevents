@@ -40,7 +40,10 @@ def listing_page(title, links):
     items = "".join(
         f'<div><a href="{href}"><img alt="" src="/img/cover.jpg"></a><a href="{href}">{text}</a></div>'
         for href, text in links)
-    return f"<html><head><title>{title} | Facebook</title></head><body>{items}</body></html>"
+    # Facebook's own interface around the content links to events too (e.g. one you're going to).
+    chrome = '<div role="navigation"><a href="/events/999999/">Your upcoming event</a></div>'
+    return (f"<html><head><title>{title} | Facebook</title></head><body>{chrome}"
+            f'<div role="main">{items}</div></body></html>')
 
 
 LOGIN_WALL = ('<html><head><title>Log in to Facebook</title></head><body><form>'
