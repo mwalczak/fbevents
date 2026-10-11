@@ -10,6 +10,8 @@ timezone = "Europe/Warsaw"
 
 [sources]
 # Pages whose events you always want: paste the Page address as it is in the browser.
+# With fbedb, manage Pages there instead (Manage Pages at https://fbedb.walczaki.com);
+# the first run copies these into fbedb, after that this list is not used.
 pages = [
   "https://www.facebook.com/SomeVenue",
   # "https://www.facebook.com/profile.php?id=100064000000000",
@@ -28,6 +30,12 @@ username = "you@gmail.com"
 # password: set the SMTP_PASSWORD environment variable (a Gmail App Password)
 to = ["you@gmail.com"]
 send_when_empty = false    # true = also mail "No new events today"
+
+[fbedb]
+# Where events are saved and Pages are managed. On the server this is set for you
+# (http://fbedb inside the cluster) and used once the FBEDB_TOKEN secret is set.
+# For local runs: url = "https://fbedb.walczaki.com" and FBEDB_TOKEN in the environment.
+# url = "https://fbedb.walczaki.com"
 
 [browser]
 locale = "pl-PL"

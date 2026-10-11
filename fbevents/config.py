@@ -36,6 +36,9 @@ class Config:
     pause_seconds: tuple[float, float] = (4.0, 12.0)
     start_delay_minutes: float = 30.0
     seen_days: int = 180
+    # [fbedb]
+    fbedb_url: str = ""
+    fbedb_token: str = ""
 
     @classmethod
     def load(cls, path, required=True):
@@ -54,7 +57,7 @@ class Config:
             raise SystemExit(f"{path} (the CONFIG_TOML variable on the server) is not valid TOML: {e}."
                              " Text needs quotes, decimals use a dot, one value per line.")
         loc, src = raw.get("location", {}), raw.get("sources", {})
-        mail, br = raw.get("email", {}), raw.get("browser", {})
+        mail, br, edb = raw.get("email", {}), raw.get("browser", {}), raw.get("fbedb", {})
         to = mail.get("to", [])
         c = cls(
             city=loc.get("city", ""),
@@ -81,6 +84,8 @@ class Config:
             pause_seconds=tuple(br.get("pause_seconds", (4.0, 12.0))),
             start_delay_minutes=float(br.get("start_delay_minutes", 30)),
             seen_days=int(raw.get("seen_days", 180)),
+            fbedb_url=os.environ.get("FBEDB_URL") or edb.get("url", ""),
+            fbedb_token=os.environ.get("FBEDB_TOKEN") or edb.get("token", ""),
         )
         if not c.mail_to and c.smtp_user:
             c.mail_to = [c.smtp_user]

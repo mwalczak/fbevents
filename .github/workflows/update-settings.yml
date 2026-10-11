@@ -1,6 +1,6 @@
 name: Update settings
 
-# Copies the CONFIG_TOML variable and the FB_AUTH_JSON / SMTP_PASSWORD secrets into the
+# Copies the CONFIG_TOML variable and the FB_AUTH_JSON / SMTP_PASSWORD / FBEDB_TOKEN secrets into the
 # fbevents Secret on the server. The next run (daily or "Run now") uses them; nothing restarts.
 # "Test and deploy" calls this too, so a deploy always carries the current settings.
 on:
@@ -67,14 +67,19 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           FB_AUTH_JSON: ${{ secrets.FB_AUTH_JSON }}
           CONFIG_TOML: ${{ vars.CONFIG_TOML }}
+          FBEDB_TOKEN: ${{ secrets.FBEDB_TOKEN }}
         run: |
           dir=$(mktemp -d)
           printf '%s\n' "$CONFIG_TOML" > "$dir/config.toml"
           printf '%s\n' "$FB_AUTH_JSON" > "$dir/auth.json"
+          # FBEDB_TOKEN is optional: without it the run just emails, as before fbedb.
+          extra=()
+          [ -n "$FBEDB_TOKEN" ] && extra+=(--from-literal=FBEDB_TOKEN="$FBEDB_TOKEN")
           kubectl create secret generic fbevents \
               --from-file=config.toml="$dir/config.toml" \
               --from-file=auth.json="$dir/auth.json" \
               --from-literal=SMTP_PASSWORD="$SMTP_PASSWORD" \
+              "${extra[@]}" \
               --dry-run=client -o yaml \
             | ssh debian@${{ secrets.VPS_HOST }} 'KUBECONFIG=$HOME/.kube/config kubectl apply -f -'
           rm -rf "$dir"

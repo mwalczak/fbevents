@@ -32,7 +32,7 @@ def where(ev):
 
 
 def source(ev):
-    pages = [name for kind, name in ev["sources"] if kind == "page"]
+    pages = [s["name"] for s in ev["sources"] if s["kind"] == "page"]
     return "from " + ", ".join(pages) if pages else "nearby"
 
 

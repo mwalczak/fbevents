@@ -37,6 +37,11 @@ spec:
               env:
                 - name: SMTP_PASSWORD
                   valueFrom: { secretKeyRef: { name: fbevents, key: SMTP_PASSWORD } }
+                # fbedb in the same namespace; used once the FBEDB_TOKEN secret is set
+                - name: FBEDB_URL
+                  value: http://fbedb
+                - name: FBEDB_TOKEN
+                  valueFrom: { secretKeyRef: { name: fbevents, key: FBEDB_TOKEN, optional: true } }
               volumeMounts:
                 - { name: data, mountPath: /data }
                 - { name: settings, mountPath: /etc/fbevents, readOnly: true }

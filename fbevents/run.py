@@ -11,6 +11,7 @@ import urllib.request
 from . import digest
 from .browser import Facebook, LoginRequired
 from .extract import distance_km, page_events_url, parse_event_html
+from .fbedb import Fbedb, FbedbError
 
 log = logging.getLogger("fbevents")
 
@@ -67,22 +68,40 @@ def alert(cfg, state, key, subj, text, dry_run):
         log.error("could not send alert email: %s", e)
 
 
-def collect(fb, cfg):
-    """{event_id: {"url", "card", "sources": [(kind, name)]}} from all listing pages."""
+def pages_to_check(cfg, edb, dry_run):
+    """The Pages list from fbedb (or the config without fbedb). The first time, when fbedb has
+    no Pages at all, the config's Pages are copied there."""
+    if not edb:
+        return cfg.pages
+    sources = edb.sources()
+    if not sources and cfg.pages:
+        log.info("fbedb has no Pages yet: adding the %d from the config", len(cfg.pages))
+        if not dry_run:
+            for url in cfg.pages:
+                edb.add_page(url)
+        return cfg.pages
+    paused = sum(not s["enabled"] for s in sources)
+    if paused:
+        log.info("%d Pages paused in fbedb", paused)
+    return [s["url"] for s in sources if s["enabled"]]
+
+
+def collect(fb, cfg, pages):
+    """{event_id: {"url", "card", "sources": [{"kind", "name", "url"}]}} from all listing pages."""
     found = {}
-    log.info("checking %d Pages and %d town pages", len(cfg.pages), len(cfg.city_urls))
+    log.info("checking %d Pages and %d town pages", len(pages), len(cfg.city_urls))
     if not cfg.city_urls:
         log.warning("no city_urls in the config, so no nearby events")
 
-    def add(links, kind, name):
+    def add(links, kind, name, url):
         for eid, link in links.items():
             item = found.setdefault(eid, {**link, "sources": []})
             if len(link["card"]) > len(item["card"]):
                 item["card"] = link["card"]
-            if (kind, name) not in item["sources"]:
-                item["sources"].append((kind, name))
+            if not any(s["kind"] == kind and s["url"] == url for s in item["sources"]):
+                item["sources"].append({"kind": kind, "name": name, "url": url})
 
-    for url in cfg.pages:
+    for url in pages:
         try:
             title, links = fb.listing(page_events_url(url), cfg.scrolls)
         except LoginRequired:
@@ -91,7 +110,7 @@ def collect(fb, cfg):
             log.warning("page %s failed: %s", url, e)
             continue
         log.info("page %s (%s): %d events", title or url, url, len(links))
-        add(links, "page", title or url)
+        add(links, "page", title or url, url)
     for url in cfg.city_urls:
         try:
             title, links = fb.listing(url, cfg.scrolls)
@@ -101,7 +120,7 @@ def collect(fb, cfg):
             log.warning("city page %s failed: %s", url, e)
             continue
         log.info("nearby %s (%s): %d events", title or url, url, len(links))
-        add(links, "nearby", title or url)
+        add(links, "nearby", title or url, url)
     return found
 
 
@@ -112,7 +131,7 @@ def keep_reason(ev, cfg, home, now):
     ends = ev.get("end") or ev.get("start")
     if ends and ends < now:
         return "past"
-    from_page = any(kind == "page" for kind, _ in ev["sources"])
+    from_page = any(s["kind"] == "page" for s in ev["sources"])
     if ev.get("distance_km") is not None and (not from_page or cfg.pages_use_radius):
         if ev["distance_km"] > cfg.radius_km:
             return f"{ev['distance_km']:.0f} km away"
@@ -133,10 +152,29 @@ def run(cfg, state, *, dry_run=False, delay=True, auth_seed=None):
         log.info("waiting %.0f min before starting", wait / 60)
         time.sleep(wait)
 
+    edb = None
+    if cfg.fbedb_url and cfg.fbedb_token:
+        edb = Fbedb(cfg.fbedb_url, cfg.fbedb_token)
+    elif cfg.fbedb_url:
+        log.warning("fbedb url is set but FBEDB_TOKEN is not, so fbedb is not used")
+    try:
+        pages = pages_to_check(cfg, edb, dry_run)
+    except FbedbError as e:
+        log.error("fbedb: %s", e)
+        alert(cfg, state, "fbedb-read", "Facebook events: fbedb did not answer",
+              f"The daily run stopped before opening Facebook because fbedb did not answer:\n\n{e}\n",
+              dry_run)
+        return 1
+    if edb:
+        state.clear_alert("fbedb-read")
+
     opened = []
+    touches = []
     try:
         with Facebook(cfg, state.auth) as fb:
-            found = collect(fb, cfg)
+            found = collect(fb, cfg, pages)
+            # Listed again but opened on an earlier run: fbedb just notes they're still listed.
+            touches = [found[eid] for eid in found if eid in seen]
             new = [eid for eid in found if eid not in seen]
             log.info("%d events listed, %d new", len(found), len(new))
             if len(new) > cfg.max_event_pages:
@@ -177,14 +215,27 @@ def run(cfg, state, *, dry_run=False, delay=True, auth_seed=None):
         if not reason:
             events.append(ev)
     events.sort(key=lambda e: e.get("start") or float("inf"))
-    log.info("%d new events for the digest", len(events))
+    log.info("%d events found that pass the filters", len(events))
+
+    if edb and not dry_run:
+        try:
+            new_ids = edb.save(events, touches)
+        except FbedbError as e:
+            log.error("could not save events to fbedb: %s", e)
+            alert(cfg, state, "fbedb-save", "Facebook events: could not save to fbedb",
+                  f"The events were collected but not saved, so they are tried again next run:\n\n{e}\n",
+                  dry_run)
+            return 1  # not remembered, so the same events are opened and saved next run
+        state.clear_alert("fbedb-save")
+        events = [ev for ev in events if ev["id"] in new_ids]
+        log.info("saved to fbedb, %d of them new", len(events))
 
     html = digest.render_html(events, cfg.timezone)
     text = digest.render_text(events, cfg.timezone)
     state.digest.write_text(html)
     if dry_run:
         print(f"\n{digest.subject(events)}\n\n{text}")
-        print(f"(dry run: nothing sent or remembered; see {state.digest})")
+        print(f"(dry run: nothing sent, saved or remembered; see {state.digest})")
         return 0
     if events or cfg.send_when_empty:
         try:

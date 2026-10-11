@@ -23,6 +23,24 @@ isn't zero. If Facebook logs the session out, you get an email asking you to log
   Secret, which the deploy workflow writes from GitHub.
 - On days with nothing new, no email is sent (unless `send_when_empty = true`).
 
+## With fbedb
+
+[fbedb](https://github.com/mwalczak/fbedb) (https://fbedb.walczaki.com) is the web list of
+everything collected, and the place to manage which Facebook Pages are checked. Once the
+`FBEDB_TOKEN` secret is set here (the same value as in the fbedb repo), each run:
+
+1. takes the Pages to check from fbedb (paused ones are skipped). The first time, when fbedb
+   has no Pages yet, it copies `pages` from the config there; after that the config list is
+   not used,
+2. posts every event it found to fbedb: the newly opened ones in full, and the ones it already
+   knew as "still listed". fbedb stores each event once, by its Facebook event id,
+3. emails only the events fbedb didn't have before.
+
+If fbedb doesn't answer, the run stops (before opening Facebook, or before emailing) and you
+get an email; nothing is remembered, so the next run picks up the same events. Without
+`FBEDB_TOKEN` the app works on its own as before. Set up fbedb first, then add the token here
+and run **Update settings**.
+
 ## One-time setup
 
 ### 1. Log in to Facebook on your computer
@@ -79,9 +97,10 @@ Repository secrets and variables (Settings → Secrets and variables → Actions
 | `FB_AUTH_JSON` | secret | Facebook session from step 1 |
 | `SMTP_PASSWORD` | secret | email password / app password |
 | `CONFIG_TOML` | variable | the whole `config.toml` |
+| `FBEDB_TOKEN` | secret | optional: the token of [fbedb](#with-fbedb), same value as there |
 
 Re-run the **Test and deploy** workflow (or push to `main`). It runs the tests, builds the
-image, pushes it to GHCR and applies the Secret and `k8s.yaml` on the server. Until all five
+image, pushes it to GHCR and applies the Secret and `k8s.yaml` on the server. Until the first five
 are set it only runs the tests.
 
 After the first deploy, make the GHCR package public (Packages → fbevents → Package settings

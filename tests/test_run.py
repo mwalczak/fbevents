@@ -11,7 +11,7 @@ from fbevents import digest
 from fbevents.config import Config
 from fbevents.run import run
 from fbevents.state import State
-from tests.fake_fb import FakeFacebook
+from tests.fake_fb import FakeFacebook, FakeFbedb
 
 CHROMIUM = os.environ.get("FBEVENTS_CHROMIUM") or (
     "/opt/pw-browsers/chromium" if Path("/opt/pw-browsers/chromium").exists() else "")
@@ -114,3 +114,62 @@ def test_empty_page_says_what_facebook_showed(fake, tmp_path, sent, caplog):
     assert "no city_urls in the config" in caplog.text
     assert "/gone/upcoming_hosted_events" in caplog.text
     assert "This content isn't available right now" in caplog.text
+
+
+@pytest.fixture
+def edb():
+    e = FakeFbedb().start()
+    yield e
+    e.stop()
+
+
+def test_with_fbedb_pages_come_from_it_and_only_new_events_are_mailed(fake, edb, tmp_path, sent):
+    cfg, state, seed = make(fake, tmp_path)
+    cfg.pages = []
+    cfg.fbedb_url, cfg.fbedb_token = edb.url, edb.token
+    edb.sources = [{"id": 1, "url": fake.url + "/venue", "name": "The Venue", "enabled": True},
+                   {"id": 2, "url": fake.url + "/paused", "name": "Paused", "enabled": False}]
+    # fbedb already has the street food festival (e.g. from before seen.json was lost).
+    edb.events["444444"] = {"url": "https://www.facebook.com/events/444444/"}
+
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert not [p for p in fake.requests if p.startswith("/paused")]
+    saved = {e["url"].split("/")[-2]: e for e in edb.posts[-1]}
+    assert set(saved) == {"111111", "444444"}  # past and far-away events are not saved
+    assert saved["111111"]["name"] == "Concert at the Venue"
+    assert saved["111111"]["sources"][0] == {"kind": "page", "name": "The Venue",
+                                              "url": fake.url + "/venue"}
+    assert [s for s, _ in sent] == ["1 new event near you"]
+    assert "Concert at the Venue" in sent[0][1] and "Street food" not in sent[0][1]
+
+    # Next day: nothing new; every event found is reported to fbedb as still listed.
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert len(sent) == 1
+    assert all(e["touch"] for e in edb.posts[-1])
+    assert {e["url"].split("/")[-2] for e in edb.posts[-1]} == {"111111", "222222", "444444", "555555"}
+
+
+def test_fbedb_gets_the_config_pages_the_first_time(fake, edb, tmp_path, sent):
+    cfg, state, seed = make(fake, tmp_path)
+    cfg.fbedb_url, cfg.fbedb_token = edb.url, edb.token
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert [s["url"] for s in edb.sources] == [fake.url + "/venue"]
+    assert sent[0][0] == "2 new events near you"
+
+
+def test_fbedb_down_means_nothing_is_remembered(fake, edb, tmp_path, sent):
+    cfg, state, seed = make(fake, tmp_path)
+    cfg.fbedb_url, cfg.fbedb_token = edb.url, edb.token
+    edb.down = True
+    assert run(cfg, state, delay=False, auth_seed=seed) == 1
+    assert [s for s, _ in sent] == ["Facebook events: fbedb did not answer"]
+    assert fake.requests == []  # Facebook isn't opened at all
+
+    # fbedb fails while saving: no digest, nothing remembered, so next run tries again.
+    edb.down, edb.fail_saving = False, True
+    assert run(cfg, state, delay=False, auth_seed=seed) == 1
+    assert [s for s, _ in sent][-1] == "Facebook events: could not save to fbedb"
+    assert not state.seen_file.exists()
+    edb.fail_saving = False
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert sent[-1][0] == "2 new events near you"

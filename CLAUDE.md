@@ -8,6 +8,9 @@ See README.md for what it does and how it's deployed.
 - `fbevents/browser.py`: the only code that talks to Facebook. `LoginRequired` means the session
   is gone; the run then emails the owner instead of retrying.
 - `fbevents/run.py`: one run (collect, open new events, filter, email, remember).
+- `fbevents/fbedb.py`: client for mwalczak/fbedb (Pages list, saving events; its answer decides
+  which events are new and get emailed). Used when FBEDB_URL and FBEDB_TOKEN are set; change the
+  API together with fbedb. `tests/fake_fb.py` has a FakeFbedb.
 - Tests: `python -m pytest -q`. `tests/test_run.py` needs Chromium: in Claude cloud sessions set
   `FBEVENTS_CHROMIUM=/opt/pw-browsers/chromium` (picked up automatically if that path exists).
 - Deploy: push to `main` → GitHub Actions builds the image and applies `k8s.yaml` on the k3s server

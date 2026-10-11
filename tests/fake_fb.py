@@ -108,3 +108,72 @@ class FakeFacebook:
 
     def stop(self):
         self.server.shutdown()
+
+
+class FakeFbedb:
+    """Stand-in for fbedb's API (https://github.com/mwalczak/fbedb): Pages list and event saving."""
+
+    def __init__(self, token="edb-token"):
+        self.token = token
+        self.sources = []
+        self.events = {}
+        self.posts = []
+        self.down = False
+        self.fail_saving = False
+
+    def start(self):
+        fake = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def _send(self, status, body=None):
+                data = b"" if body is None else json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def _ok(self):
+                if fake.down:
+                    self._send(503, {"error": "down"})
+                    return False
+                if self.headers.get("Authorization") != f"Bearer {fake.token}":
+                    self._send(401, {"error": "token required"})
+                    return False
+                return True
+
+            def do_GET(self):
+                if self._ok() and self.path == "/api/sources":
+                    self._send(200, {"sources": fake.sources})
+
+            def do_POST(self):
+                if not self._ok():
+                    return
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if self.path == "/api/sources":
+                    fake.sources.append({"id": len(fake.sources) + 1, "url": body["url"],
+                                         "name": None, "enabled": True})
+                    self._send(201, fake.sources[-1])
+                elif self.path == "/api/events" and fake.fail_saving:
+                    self._send(500, {"error": "server error"})
+                elif self.path == "/api/events":
+                    fake.posts.append(body["events"])
+                    new = []
+                    for ev in body["events"]:
+                        eid = ev["url"].rstrip("/").split("/")[-1]
+                        if ev.get("touch") or eid in fake.events:
+                            continue
+                        fake.events[eid] = ev
+                        new.append(eid)
+                    self._send(200, {"new": new, "updated": [], "unknown": [], "invalid": 0})
+
+            def log_message(self, *args):
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_port}"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        return self
+
+    def stop(self):
+        self.server.shutdown()
