@@ -203,3 +203,13 @@ def test_stops_listing_when_enough_is_waiting_and_continues_there_next_run(fake,
     assert listings() == ["/venue/upcoming_hosted_events", town]
     assert len(sent) == 2
     assert state.next_page() is None
+
+
+def test_cookies_survive_the_fresh_browser_contexts(fake, tmp_path, sent, monkeypatch):
+    from fbevents import browser
+    monkeypatch.setattr(browser, "PAGES_PER_CONTEXT", 2)
+    cfg, state, seed = make(fake, tmp_path)
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert len(fake.cookies) >= 6  # 2 listings + 4 events: at least 2 context changes
+    assert all("xs=fresh" in c for c in fake.cookies[1:])
+    assert "xs" in json.loads(state.auth.read_text())["cookies"][0]["name"]

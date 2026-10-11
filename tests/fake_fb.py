@@ -52,6 +52,7 @@ class FakeFacebook:
         self.now = now
         self.login_wall = False
         self.requests = []
+        self.cookies = []  # Cookie header of each page request
         day = 86400
         near, far = (54.36, 18.64), (55.07, 18.65)  # ~1 km and ~80 km from 54.35, 18.65
         self.events = {
@@ -81,6 +82,8 @@ class FakeFacebook:
             def do_GET(self):
                 fake.requests.append(self.path)
                 path = self.path.split("?")[0]
+                if not path.startswith("/img/"):
+                    fake.cookies.append(self.headers.get("Cookie") or "")
                 if fake.login_wall:
                     body = LOGIN_WALL
                 elif path in fake.pages:
@@ -95,6 +98,8 @@ class FakeFacebook:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(data)))
+                if len(fake.cookies) == 1:  # the first page sets the session, like a login refresh
+                    self.send_header("Set-Cookie", "xs=fresh; Path=/; Max-Age=3600")
                 self.end_headers()
                 self.wfile.write(data)
 

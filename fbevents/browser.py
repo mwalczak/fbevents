@@ -17,17 +17,20 @@ log = logging.getLogger("fbevents")
 LAUNCH_ARGS = [
     "--disable-dev-shm-usage",
     "--disable-blink-features=AutomationControlled",
-    # Keep Chromium small on a 2-CPU server: one renderer process instead of one per site,
-    # no GPU emulation, no sound, no background extras.
+    # Keep Chromium small on a 2-CPU server: one renderer process per tab instead of one per
+    # site, no GPU emulation, no sound, no background extras. (Not one renderer for all tabs:
+    # then closing a tab doesn't give its memory back.)
     "--disable-site-isolation-trials",
     "--disable-features=site-per-process,IsolateOrigins,Translate,MediaRouter,OptimizationHints",
-    "--renderer-process-limit=1",
     "--disable-gpu",
     "--mute-audio",
     "--disable-extensions",
 ]
 # Pictures, videos and fonts are most of Facebook's weight; the event data is in the HTML.
 BLOCKED_TYPES = {"image", "media", "font"}
+# Start a fresh browser context (same cookies) after this many pages, so whatever Facebook's
+# scripts leave behind can't add up over a run.
+PAGES_PER_CONTEXT = 10
 
 
 class LoginRequired(Exception):
@@ -82,17 +85,27 @@ class Facebook:
         self.cfg = cfg
         self.auth_path = auth_path
         self.pages_opened = 0
+        self.context = None
+        self.page = None
+
+    def _new_context(self):
+        """A new context with the current cookies (from the old context, else the saved file)."""
+        cookies = str(self.auth_path)
+        if self.context is not None:
+            cookies = self.context.storage_state()
+            self.context.close()
+            self.page = None
+        self.context = self.browser.new_context(
+            storage_state=cookies, **_context_options(self.cfg, self.browser))
+        self.context.set_default_timeout(45_000)
+        self.context.route("**/*", _skip_heavy)
+        self.context_pages = 0
 
     def __enter__(self):
         self._pw = sync_playwright().start()
         try:
             self.browser = _launch(self._pw, self.cfg, self.cfg.headless)
-            self.context = self.browser.new_context(
-                storage_state=str(self.auth_path), **_context_options(self.cfg, self.browser)
-            )
-            self.context.set_default_timeout(45_000)
-            self.context.route("**/*", _skip_heavy)
-            self.page = None
+            self._new_context()
         except Exception:
             self._pw.stop()
             raise
@@ -125,9 +138,12 @@ class Facebook:
         log.debug("open %s", url)
         # A fresh tab per page: Facebook's single-page app keeps growing in one tab, and
         # closing it hands the memory back.
+        if self.context_pages >= PAGES_PER_CONTEXT:
+            self._new_context()
         if self.page is not None:
             self.page.close()
         self.page = self.context.new_page()
+        self.context_pages += 1
         resp = self.page.goto(url, wait_until="domcontentloaded")
         try:
             self.page.wait_for_load_state("load", timeout=15_000)
