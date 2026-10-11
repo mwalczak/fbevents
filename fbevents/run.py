@@ -186,7 +186,10 @@ def run(cfg, state, *, dry_run=False, delay=True, auth_seed=None):
             log.info("%d events listed, %d new", len(found), len(new))
             if len(new) > cfg.max_event_pages:
                 log.info("opening %d now, the rest next time", cfg.max_event_pages)
-            for eid in new[: cfg.max_event_pages]:
+            to_open = new[: cfg.max_event_pages]
+            for n, eid in enumerate(to_open, 1):
+                if n % 5 == 0 or n == len(to_open):  # a sign of life every few pages
+                    log.info("opening event pages: %d/%d", n, len(to_open))
                 item = found[eid]
                 info = {}
                 try:

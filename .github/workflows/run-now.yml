@@ -60,12 +60,25 @@ jobs:
             sleep 10
           done
           k logs -f "job/$name" || true
-          for i in $(seq 1 30); do
-            done_=$(k get "job/$name" -o 'jsonpath={.status.succeeded}{.status.failed}')
-            [ -n "$done_" ] && break
-            sleep 2
-          done
+
+          # The live log can be cut while the run goes on, so wait for the job itself.
+          finished() { [ -n "$(k get "job/$name" -o 'jsonpath={.status.succeeded}{.status.failed}')" ]; }
+          for i in $(seq 1 10); do finished && break; sleep 2; done  # status lags the log a little
+          if ! finished; then
+            echo "(live log was cut; waiting for the run to finish)"
+            for i in $(seq 1 180); do finished && break; sleep 30; done
+            echo "----- full log -----"
+            k logs "job/$name" || true
+          fi
+
+          result=$(k get pods -l "job-name=$name" \
+            -o 'jsonpath={.items[0].status.containerStatuses[0].state.terminated.reason} exit code {.items[0].status.containerStatuses[0].state.terminated.exitCode}')
+          echo "Result: ${result:-still running?}"
           if ! k get "job/$name" -o 'jsonpath={.status.succeeded}' | grep -q 1; then
-            echo "::error::The run failed; see the log above (exit code 2 = Facebook wants a new login)"
+            case "$result" in
+              *OOMKilled*) echo "::error::The run ran out of memory (OOMKilled)" ;;
+              *"exit code 2") echo "::error::Facebook wants a new login" ;;
+              *) echo "::error::The run did not succeed: ${result:-unknown}" ;;
+            esac
             exit 1
           fi
