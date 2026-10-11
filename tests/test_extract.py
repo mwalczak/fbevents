@@ -87,3 +87,22 @@ def test_config_ignores_pasted_invisible_characters(tmp_path):
                  'longitude = 18.54179​\n', encoding="utf-8")
     c = Config.load(p)
     assert (c.city, c.latitude, c.longitude) == ("Rybnik", 50.09713, 18.54179)
+
+
+def test_email_comes_from_fbevents(monkeypatch):
+    from fbevents import digest
+    from fbevents.config import Config
+    sent = []
+
+    class FakeSMTP:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def starttls(self, **k): pass
+        def login(self, *a): pass
+        def send_message(self, msg): sent.append(msg)
+
+    monkeypatch.setattr(digest.smtplib, "SMTP", FakeSMTP)
+    cfg = Config(smtp_user="me@gmail.com", mail_from="me@gmail.com", mail_to=["me@gmail.com"])
+    digest.send(cfg, "1 new event near you", "text")
+    assert sent[0]["From"] == "FBEvents <me@gmail.com>"

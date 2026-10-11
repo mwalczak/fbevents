@@ -33,12 +33,12 @@ def event_page(eid, name, start, place, lat, lon, end=None):
             f'<meta property="og:title" content="{name}"></head><body>'
             + script(other) + script({"x": [stub]})
             + script(event_blob(eid, name, start, place, lat, lon, end, stub_place=True))
-            + f"<h1>{name}</h1></body></html>")
+            + f'<h1>{name}</h1><video src="/img/promo.mp4" autoplay></video></body></html>')
 
 
 def listing_page(title, links):
     items = "".join(
-        f'<div><a href="{href}"><img alt=""></a><a href="{href}">{text}</a></div>'
+        f'<div><a href="{href}"><img alt="" src="/img/cover.jpg"></a><a href="{href}">{text}</a></div>'
         for href, text in links)
     return f"<html><head><title>{title} | Facebook</title></head><body>{items}</body></html>"
 

@@ -14,11 +14,31 @@ from .extract import collect_links, page_title
 
 log = logging.getLogger("fbevents")
 
-LAUNCH_ARGS = ["--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"]
+LAUNCH_ARGS = [
+    "--disable-dev-shm-usage",
+    "--disable-blink-features=AutomationControlled",
+    # Keep Chromium small on a 2-CPU server: one renderer process instead of one per site,
+    # no GPU emulation, no sound, no background extras.
+    "--disable-site-isolation-trials",
+    "--disable-features=site-per-process,IsolateOrigins,Translate,MediaRouter,OptimizationHints",
+    "--renderer-process-limit=1",
+    "--disable-gpu",
+    "--mute-audio",
+    "--disable-extensions",
+]
+# Pictures, videos and fonts are most of Facebook's weight; the event data is in the HTML.
+BLOCKED_TYPES = {"image", "media", "font"}
 
 
 class LoginRequired(Exception):
     pass
+
+
+def _skip_heavy(route):
+    if route.request.resource_type in BLOCKED_TYPES:
+        route.abort()
+    else:
+        route.continue_()
 
 
 def _user_agent(cfg, browser):
@@ -71,7 +91,8 @@ class Facebook:
                 storage_state=str(self.auth_path), **_context_options(self.cfg, self.browser)
             )
             self.context.set_default_timeout(45_000)
-            self.page = self.context.new_page()
+            self.context.route("**/*", _skip_heavy)
+            self.page = None
         except Exception:
             self._pw.stop()
             raise
@@ -102,6 +123,11 @@ class Facebook:
     def _goto(self, url):
         self._pause()
         log.debug("open %s", url)
+        # A fresh tab per page: Facebook's single-page app keeps growing in one tab, and
+        # closing it hands the memory back.
+        if self.page is not None:
+            self.page.close()
+        self.page = self.context.new_page()
         resp = self.page.goto(url, wait_until="domcontentloaded")
         try:
             self.page.wait_for_load_state("load", timeout=15_000)

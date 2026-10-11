@@ -24,6 +24,7 @@ class Config:
     smtp_user: str = ""
     smtp_password: str = ""
     mail_from: str = ""
+    mail_from_name: str = "FBEvents"
     mail_to: list[str] = field(default_factory=list)
     send_when_empty: bool = False
     # [browser]
@@ -73,6 +74,7 @@ class Config:
             smtp_user=mail.get("username", ""),
             smtp_password=os.environ.get("SMTP_PASSWORD") or mail.get("password", ""),
             mail_from=mail.get("from") or mail.get("username", ""),
+            mail_from_name=mail.get("from_name", "FBEvents"),
             mail_to=[to] if isinstance(to, str) else list(to),
             send_when_empty=bool(mail.get("send_when_empty", False)),
             headless=bool(br.get("headless", True)),

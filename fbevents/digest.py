@@ -4,6 +4,7 @@ import smtplib
 import ssl
 from datetime import datetime
 from email.message import EmailMessage
+from email.utils import formataddr
 from html import escape
 from zoneinfo import ZoneInfo
 
@@ -81,7 +82,7 @@ def send(cfg, subj, text, html=None):
         raise RuntimeError("Email is not configured: set [email] in config.toml")
     msg = EmailMessage()
     msg["Subject"] = subj
-    msg["From"] = cfg.mail_from or cfg.smtp_user
+    msg["From"] = formataddr((cfg.mail_from_name, cfg.mail_from or cfg.smtp_user))
     msg["To"] = ", ".join(cfg.mail_to)
     msg.set_content(text)
     if html:

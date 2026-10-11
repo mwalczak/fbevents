@@ -29,6 +29,7 @@ smtp_port = 587            # 465 for SSL
 username = "you@gmail.com"
 # password: set the SMTP_PASSWORD environment variable (a Gmail App Password)
 to = ["you@gmail.com"]
+# from_name = "FBEvents"   # sender name shown in the inbox
 send_when_empty = false    # true = also mail "No new events today"
 
 [fbedb]

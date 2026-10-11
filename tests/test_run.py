@@ -57,6 +57,7 @@ def test_daily_run(fake, tmp_path, sent):
     assert "Last month" not in text and "Far away" not in text and "Some other" not in text
     assert set(json.loads(state.seen_file.read_text())) == {"111111", "222222", "444444", "555555"}
     assert state.auth.exists()
+    assert not [p for p in fake.requests if p.startswith("/img/")]  # pictures and videos skipped
 
     # Next day: nothing new, no email, and no event pages opened again.
     fake.requests.clear()
