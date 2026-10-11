@@ -174,3 +174,32 @@ def test_fbedb_down_means_nothing_is_remembered(fake, edb, tmp_path, sent):
     edb.fail_saving = False
     assert run(cfg, state, delay=False, auth_seed=seed) == 0
     assert sent[-1][0] == "2 new events near you"
+
+
+def test_stops_listing_when_enough_is_waiting_and_continues_there_next_run(fake, tmp_path, sent):
+    cfg, state, seed = make(fake, tmp_path)
+    cfg.max_event_pages = 2
+    town = "/events/explore/town/123/"
+
+    # The Venue lists 2 new events: enough for this run, so the town page waits.
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert town not in fake.requests
+    assert sent[-1][0] == "1 new event near you"  # the other one is last month's party
+    assert state.next_page() == fake.url + town
+
+    def listings():
+        return [p for p in fake.requests if p in (town, "/venue/upcoming_hosted_events")]
+
+    # Next run starts with the town page, which has 2 new events itself: stop again.
+    fake.requests.clear()
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert listings() == [town]
+    assert sent[-1][0] == "1 new event near you"  # street food; the far-away fair is skipped
+    assert state.next_page() == fake.url + "/venue"
+
+    # Nothing new anywhere: one full round, starting with the Venue.
+    fake.requests.clear()
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert listings() == ["/venue/upcoming_hosted_events", town]
+    assert len(sent) == 2
+    assert state.next_page() is None

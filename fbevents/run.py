@@ -86,12 +86,23 @@ def pages_to_check(cfg, edb, dry_run):
     return [s["url"] for s in sources if s["enabled"]]
 
 
-def collect(fb, cfg, pages):
-    """{event_id: {"url", "card", "sources": [{"kind", "name", "url"}]}} from all listing pages."""
+def collect(fb, cfg, pages, seen, start_at=None):
+    """Lists events on the Pages and town pages, starting at `start_at` (a page url) and going
+    round. Stops once more new events are waiting than one run opens, so busy Pages don't
+    cost listing the rest; the next run starts where this one stopped.
+
+    Returns ({event_id: {"url", "card", "sources": [{"kind", "name", "url"}]}},
+             url of the page to start with next time, or None if all were checked).
+    """
     found = {}
     log.info("checking %d Pages and %d town pages", len(pages), len(cfg.city_urls))
     if not cfg.city_urls:
         log.warning("no city_urls in the config, so no nearby events")
+    order = [("page", u) for u in pages] + [("nearby", u) for u in cfg.city_urls]
+    first = next((i for i, (_, u) in enumerate(order) if u == start_at), 0)
+    order = order[first:] + order[:first]
+    if first:
+        log.info("starting with %s, where the last run stopped", start_at)
 
     def add(links, kind, name, url):
         for eid, link in links.items():
@@ -101,27 +112,23 @@ def collect(fb, cfg, pages):
             if not any(s["kind"] == kind and s["url"] == url for s in item["sources"]):
                 item["sources"].append({"kind": kind, "name": name, "url": url})
 
-    for url in pages:
+    for i, (kind, url) in enumerate(order):
         try:
-            title, links = fb.listing(page_events_url(url), cfg.scrolls)
+            title, links = fb.listing(page_events_url(url) if kind == "page" else url, cfg.scrolls)
         except LoginRequired:
             raise
-        except Exception as e:  # noqa: BLE001 - one broken Page shouldn't stop the run
-            log.warning("page %s failed: %s", url, e)
-            continue
-        log.info("page %s (%s): %d events", title or url, url, len(links))
-        add(links, "page", title or url, url)
-    for url in cfg.city_urls:
-        try:
-            title, links = fb.listing(url, cfg.scrolls)
-        except LoginRequired:
-            raise
-        except Exception as e:  # noqa: BLE001
-            log.warning("city page %s failed: %s", url, e)
-            continue
-        log.info("nearby %s (%s): %d events", title or url, url, len(links))
-        add(links, "nearby", title or url, url)
-    return found
+        except Exception as e:  # noqa: BLE001 - one broken page shouldn't stop the run
+            log.warning("%s %s failed: %s", kind, url, e)
+            links = {}
+        else:
+            log.info("%s %s (%s): %d events", kind, title or url, url, len(links))
+            add(links, kind, title or url, url)
+        waiting = sum(eid not in seen for eid in found)
+        if waiting >= cfg.max_event_pages and i + 1 < len(order):
+            log.info("%d new events waiting already; the other %d pages are checked next run",
+                     waiting, len(order) - i - 1)
+            return found, order[i + 1][1]
+    return found, None
 
 
 def keep_reason(ev, cfg, home, now):
@@ -172,7 +179,7 @@ def run(cfg, state, *, dry_run=False, delay=True, auth_seed=None):
     touches = []
     try:
         with Facebook(cfg, state.auth) as fb:
-            found = collect(fb, cfg, pages)
+            found, next_page = collect(fb, cfg, pages, seen, state.next_page())
             # Listed again but opened on an earlier run: fbedb just notes they're still listed.
             touches = [found[eid] for eid in found if eid in seen]
             new = [eid for eid in found if eid not in seen]
@@ -248,4 +255,5 @@ def run(cfg, state, *, dry_run=False, delay=True, auth_seed=None):
     for ev in opened:
         seen[ev["id"]] = int(now)
     state.save_seen(seen)
+    state.save_next_page(next_page)
     return 0

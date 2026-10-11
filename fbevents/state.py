@@ -16,6 +16,7 @@ class State:
         self.seen_file = self.dir / "seen.json"
         self.alerts_file = self.dir / "alerts.json"
         self.geocode_file = self.dir / "geocode.json"
+        self.next_page_file = self.dir / "next_page.json"
         self.digest = self.dir / "last_digest.html"
         self.log = self.dir / "run.log"
 
@@ -53,6 +54,13 @@ class State:
         alerts = self._read(self.alerts_file, {})
         if alerts.pop(key, None) is not None:
             self._write(self.alerts_file, alerts)
+
+    # where the next run starts checking listing pages, when a run stopped early
+    def next_page(self):
+        return self._read(self.next_page_file, {}).get("url")
+
+    def save_next_page(self, url):
+        self._write(self.next_page_file, {"url": url})
 
     def geocode_cache(self):
         return self._read(self.geocode_file, {})
