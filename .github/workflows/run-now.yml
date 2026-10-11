@@ -1,17 +1,23 @@
 name: Run now
 
-# Starts one run of the daily CronJob right away (no random wait) and shows its log.
+# Starts one run of the daily CronJob right away (no random wait) and shows its log,
+# like `fbrun` on the server. Also startable from a Claude session through the GitHub API.
 on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Dry run: only print the events, send and remember nothing"
+        description: "Dry run: only print the events; nothing is saved, emailed or remembered"
         type: boolean
-        default: true
+        default: false
+
+# One manual run at a time.
+concurrency:
+  group: run-now
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 100
     steps:
       - name: Set up SSH
         run: |
@@ -25,15 +31,29 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           k() { ssh debian@${{ secrets.VPS_HOST }} "KUBECONFIG=\$HOME/.kube/config kubectl $(printf '%q ' "$@")"; }
+
+          # Never two browsers at once on the server (e.g. the daily run is still going).
+          active=$(k get jobs -o json \
+            | jq -r '.items[] | select(.metadata.name | startswith("fbevents-")) | select((.status.active // 0) > 0) | .metadata.name')
+          if [ -n "$active" ]; then
+            echo "::error::A run is already going: $active. Follow it with: kubectl logs -f job/$active"
+            exit 1
+          fi
+
           name="fbevents-manual-$(date +%s)"
           args='["run","--no-delay"]'
           [ "$DRY_RUN" = "true" ] && args='["run","--no-delay","--dry-run"]'
+          echo "Starting $name ($( [ "$DRY_RUN" = "true" ] && echo dry run || echo real run ))"
           k get cronjob fbevents -o json \
             | jq --arg name "$name" --argjson args "$args" '
                 {apiVersion: "batch/v1", kind: "Job", metadata: {name: $name},
-                 spec: (.spec.jobTemplate.spec | .template.spec.containers[0].args = $args)}' \
+                 spec: (.spec.jobTemplate.spec
+                        | .ttlSecondsAfterFinished = 86400
+                        | .template.spec.containers[0].args = $args)}' \
             | k apply -f -
-          # The first run pulls a large image, so give the pod time to start.
+          echo "Image: $(k get "job/$name" -o 'jsonpath={.spec.template.spec.containers[0].image}')"
+
+          # The first run after a deploy pulls a large image, so give the pod time to start.
           for i in $(seq 1 60); do
             phase=$(k get pods -l "job-name=$name" -o 'jsonpath={.items[0].status.phase}' 2>/dev/null || true)
             [ -n "$phase" ] && [ "$phase" != "Pending" ] && break
@@ -45,4 +65,7 @@ jobs:
             [ -n "$done_" ] && break
             sleep 2
           done
-          k get "job/$name" -o 'jsonpath={.status.succeeded}' | grep -q 1
+          if ! k get "job/$name" -o 'jsonpath={.status.succeeded}' | grep -q 1; then
+            echo "::error::The run failed; see the log above (exit code 2 = Facebook wants a new login)"
+            exit 1
+          fi

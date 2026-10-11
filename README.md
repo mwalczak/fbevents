@@ -108,9 +108,21 @@ After the first deploy, make the GHCR package public (Packages → fbevents → 
 
 ### 4. Try it
 
-Run the **Run now** workflow with "Dry run" ticked. It starts a run right away and shows its
-log, ending with the list of events it would send. Nothing is emailed or remembered. Untick
-"Dry run" to send the email for real.
+Run the **Run now** workflow. It starts a run right away (no random wait) and shows its log,
+like a daily run: events are saved, emailed and remembered. Tick "Dry run" to only print the
+events it would send. It refuses to start while another run is still going, so two browsers
+never run on the server at once; the finished job is cleaned up after a day.
+
+On the server the same is this shell function (put it in `~/.bashrc`):
+
+```sh
+fbrun() {
+  kubectl delete job fbevents-manual --ignore-not-found
+  kubectl create job fbevents-manual --from=cronjob/fbevents --dry-run=client -o yaml \
+    | sed 's/^\( *\)- run$/&\n\1- --no-delay/' | kubectl apply -f - || return
+  until kubectl logs -f job/fbevents-manual 2>/dev/null; do sleep 3; done
+}
+```
 
 ## Day to day
 
