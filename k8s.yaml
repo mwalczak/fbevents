@@ -14,7 +14,7 @@ kind: CronJob
 metadata:
   name: fbevents
 spec:
-  schedule: "15 7 * * *" # the app then waits a random 0-30 min before opening Facebook
+  schedule: "0 7,17 * * *" # 7:00 and 17:00 Warsaw; the app then waits a random 0-30 min
   timeZone: Europe/Warsaw
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600

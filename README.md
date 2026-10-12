@@ -15,8 +15,8 @@ isn't zero. If Facebook logs the session out, you get an email asking you to log
 
 ## How it runs
 
-- `k8s.yaml` has a CronJob that starts at 7:15 Europe/Warsaw. The app then waits a random
-  0–30 minutes before opening Facebook.
+- `k8s.yaml` has a CronJob that starts twice a day, at 7:00 and 17:00 Europe/Warsaw (CET/CEST).
+  The app then waits a random 0–30 minutes before opening Facebook. Two runs never overlap.
 - Seen events and the Facebook session (refreshed after each run) are kept on a small
   persistent volume.
 - Settings, the Facebook session you upload and the SMTP password are in the `fbevents`
