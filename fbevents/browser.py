@@ -157,7 +157,7 @@ class Facebook:
 
     def listing(self, url, scrolls):
         """Event links on a Page's events tab or a city's events page.
-        Returns (page title, {event_id: {"url", "card"}})."""
+        Returns (page title, {event_id: {"url", "card"}}, the address it ended up at)."""
         self._goto(url)
         for _ in range(scrolls):
             self.page.mouse.wheel(0, random.randint(1800, 2600))
@@ -178,7 +178,7 @@ class Facebook:
                 " || {}).innerText || ''")
             log.warning("no events on %s (ended up at %s, heading: %r)",
                         url, self.page.url, " ".join(heading.split())[:120])
-        return page_title(self.page.title()), links
+        return page_title(self.page.title()), links, self.page.url
 
     def event_html(self, url):
         """Raw HTML of an event page (it carries the event data as JSON), plus the DOM."""

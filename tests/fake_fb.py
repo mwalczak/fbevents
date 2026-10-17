@@ -126,6 +126,7 @@ class FakeFbedb:
         self.sources = []
         self.events = {}
         self.posts = []
+        self.checked = []  # the "checked" list of each save
         self.down = False
         self.fail_saving = False
 
@@ -166,6 +167,7 @@ class FakeFbedb:
                     self._send(500, {"error": "server error"})
                 elif self.path == "/api/events":
                     fake.posts.append(body["events"])
+                    fake.checked.append(body.get("checked"))
                     new = []
                     for ev in body["events"]:
                         eid = ev["url"].rstrip("/").split("/")[-1]

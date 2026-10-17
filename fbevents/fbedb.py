@@ -46,14 +46,16 @@ class Fbedb:
             if "HTTP 409" not in str(e):  # already there is fine
                 raise
 
-    def save(self, events, touches):
-        """Saves full events and refreshes `touches` (events found again but not opened).
+    def save(self, events, touches, checked=()):
+        """Saves full events and refreshes `touches` (events found again but not opened), and
+        reports the Pages `checked` this run so fbedb can schedule their next check.
         Returns the set of Facebook event ids that fbedb didn't have before."""
         payload = [
             {"url": ev["url"], "sources": ev["sources"],
              **{k: ev[k] for k in EVENT_FIELDS if ev.get(k) is not None}}
             for ev in events
         ] + [{"url": t["url"], "sources": t["sources"], "touch": True} for t in touches]
-        if not payload:
+        if not payload and not checked:
             return set()
-        return set(self._call("POST", "/api/events", {"events": payload})["new"])
+        body = {"events": payload, "checked": list(checked)}
+        return set(self._call("POST", "/api/events", body)["new"])

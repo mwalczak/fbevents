@@ -29,11 +29,14 @@ isn't zero. If Facebook logs the session out, you get an email asking you to log
 everything collected, and the place to manage which Facebook Pages are checked. Once the
 `FBEDB_TOKEN` secret is set here (the same value as in the fbedb repo), each run:
 
-1. takes the Pages to check from fbedb (paused ones are skipped). The first time, when fbedb
-   has no Pages yet, it copies `pages` from the config there; after that the config list is
-   not used,
+1. takes the Pages to check from fbedb: only the ones due this run (paused ones are skipped).
+   fbedb checks a Page on every run while it brings new events and less often when it's quiet,
+   down to weekly (see fbedb's README). The town page is listed on every run. The first time,
+   when fbedb has no Pages yet, it copies `pages` from the config there; after that the config
+   list is not used,
 2. posts every event it found to fbedb: the newly opened ones in full, and the ones it already
-   knew as "still listed". fbedb stores each event once, by its Facebook event id,
+   knew as "still listed", plus which Pages it listed (for their schedule). fbedb stores each
+   event once, by its Facebook event id,
 3. emails only the events fbedb didn't have before.
 
 If fbedb doesn't answer, the run stops (before opening Facebook, or before emailing) and you

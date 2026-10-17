@@ -214,3 +214,21 @@ def test_cookies_survive_the_fresh_browser_contexts(fake, tmp_path, sent, monkey
     assert len(fake.cookies) >= 6  # 2 listings + 4 events: at least 2 context changes
     assert all("xs=fresh" in c for c in fake.cookies[1:])
     assert "xs" in json.loads(state.auth.read_text())["cookies"][0]["name"]
+
+
+def test_only_due_pages_are_listed_and_checked_pages_are_reported(fake, edb, tmp_path, sent):
+    cfg, state, seed = make(fake, tmp_path)
+    cfg.pages, cfg.city_urls = [], []
+    cfg.fbedb_url, cfg.fbedb_token = edb.url, edb.token
+    edb.sources = [{"id": 1, "url": fake.url + "/venue", "name": "The Venue", "enabled": True, "due": True},
+                   {"id": 2, "url": fake.url + "/quiet", "name": "Quiet", "enabled": True, "due": False}]
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert not [p for p in fake.requests if p.startswith("/quiet")]
+    assert edb.checked[-1] == [{"url": fake.url + "/venue",
+                                "final_url": fake.url + "/venue/upcoming_hosted_events"}]
+
+    # Nothing new next time: the check is still reported, so fbedb can slow the Page down.
+    edb.posts.clear()
+    assert run(cfg, state, delay=False, auth_seed=seed) == 0
+    assert edb.checked[-1] == [{"url": fake.url + "/venue",
+                                "final_url": fake.url + "/venue/upcoming_hosted_events"}]

@@ -80,10 +80,11 @@ def pages_to_check(cfg, edb, dry_run):
             for url in cfg.pages:
                 edb.add_page(url)
         return cfg.pages
-    paused = sum(not s["enabled"] for s in sources)
-    if paused:
-        log.info("%d Pages paused in fbedb", paused)
-    return [s["url"] for s in sources if s["enabled"]]
+    enabled = [s for s in sources if s["enabled"]]
+    due = [s["url"] for s in enabled if s.get("due", True)]
+    log.info("%d of %d Pages due this run (%d paused); quiet Pages are checked less often",
+             len(due), len(enabled), len(sources) - len(enabled))
+    return due
 
 
 def collect(fb, cfg, pages, seen, start_at=None):
@@ -92,8 +93,10 @@ def collect(fb, cfg, pages, seen, start_at=None):
     cost listing the rest; the next run starts where this one stopped.
 
     Returns ({event_id: {"url", "card", "sources": [{"kind", "name", "url"}]}},
-             url of the page to start with next time, or None if all were checked).
+             url of the page to start with next time, or None if all were checked,
+             [{"url", "final_url"}] of the Pages listed, for fbedb's schedule).
     """
+    checked = []
     found = {}
     log.info("checking %d Pages and %d town pages", len(pages), len(cfg.city_urls))
     if not cfg.city_urls:
@@ -114,7 +117,7 @@ def collect(fb, cfg, pages, seen, start_at=None):
 
     for i, (kind, url) in enumerate(order):
         try:
-            title, links = fb.listing(page_events_url(url) if kind == "page" else url, cfg.scrolls)
+            title, links, final_url = fb.listing(page_events_url(url) if kind == "page" else url, cfg.scrolls)
         except LoginRequired:
             raise
         except Exception as e:  # noqa: BLE001 - one broken page shouldn't stop the run
@@ -123,12 +126,14 @@ def collect(fb, cfg, pages, seen, start_at=None):
         else:
             log.info("%s %s (%s): %d events", kind, title or url, url, len(links))
             add(links, kind, title or url, url)
+            if kind == "page":
+                checked.append({"url": url, "final_url": final_url})
         waiting = sum(eid not in seen for eid in found)
         if waiting >= cfg.max_event_pages and i + 1 < len(order):
             log.info("%d new events waiting already; the other %d pages are checked next run",
                      waiting, len(order) - i - 1)
-            return found, order[i + 1][1]
-    return found, None
+            return found, order[i + 1][1], checked
+    return found, None, checked
 
 
 def keep_reason(ev, cfg, home, now):
@@ -177,9 +182,10 @@ def run(cfg, state, *, dry_run=False, delay=True, auth_seed=None):
 
     opened = []
     touches = []
+    checked = []
     try:
         with Facebook(cfg, state.auth) as fb:
-            found, next_page = collect(fb, cfg, pages, seen, state.next_page())
+            found, next_page, checked = collect(fb, cfg, pages, seen, state.next_page())
             # Listed again but opened on an earlier run: fbedb just notes they're still listed.
             touches = [found[eid] for eid in found if eid in seen]
             new = [eid for eid in found if eid not in seen]
@@ -229,7 +235,7 @@ def run(cfg, state, *, dry_run=False, delay=True, auth_seed=None):
 
     if edb and not dry_run:
         try:
-            new_ids = edb.save(events, touches)
+            new_ids = edb.save(events, touches, checked)
         except FbedbError as e:
             log.error("could not save events to fbedb: %s", e)
             alert(cfg, state, "fbedb-save", "Facebook events: could not save to fbedb",
