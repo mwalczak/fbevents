@@ -19,3 +19,8 @@ See README.md for what it does and how it's deployed.
   Secret, standalone or called from `deploy.yml`. Never commit `config.toml` or anything under `state/`.
 - Keep the load on Facebook low: no retries (`backoffLimit: 0`), pauses between pages, a cap on
   event pages per run. Don't add parallelism.
+- Issues are tracked in PMO (https://pmo.walczaki.com, project `FBEDB`, covering fbedb and
+  fbevents; API docs at /docs, auth comes from the session's network secret). Always keep an issue's
+  status current: `in_progress` when work starts, `done` once it's deployed and checked (or
+  `wont_fix`/`duplicate`), with a short "Implemented" note appended to the description saying what
+  was built, the decisions taken and what's left out.
