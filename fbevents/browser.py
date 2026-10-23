@@ -29,8 +29,8 @@ LAUNCH_ARGS = [
 # Pictures, videos and fonts are most of Facebook's weight; the event data is in the HTML.
 BLOCKED_TYPES = {"image", "media", "font"}
 # Start a fresh browser context (same cookies) after this many pages, so whatever Facebook's
-# scripts leave behind can't add up over a run.
-PAGES_PER_CONTEXT = 10
+# scripts leave behind can't add up over a run. 5 keeps the run within 1280Mi (k8s.yaml).
+PAGES_PER_CONTEXT = 5
 
 
 class LoginRequired(Exception):

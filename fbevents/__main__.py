@@ -48,8 +48,23 @@ def main(argv=None):
         return 0
 
     from .run import run
-    return run(cfg, state, dry_run=args.dry_run, delay=not args.no_delay,
-               auth_seed=os.environ.get("FBEVENTS_AUTH_SEED"))
+    try:
+        return run(cfg, state, dry_run=args.dry_run, delay=not args.no_delay,
+                   auth_seed=os.environ.get("FBEVENTS_AUTH_SEED"))
+    finally:
+        log_memory_peak()
+
+
+def log_memory_peak(cgroup="/sys/fs/cgroup"):
+    """In the container: the most memory the run (browser included) used, against its limit."""
+    try:
+        peak = int(open(f"{cgroup}/memory.peak").read())
+        limit = open(f"{cgroup}/memory.max").read().strip()
+    except (OSError, ValueError):
+        return  # not in a container with cgroup v2
+    mib = lambda b: f"{int(b) // 2**20} MiB"  # noqa: E731
+    logging.getLogger("fbevents").info(
+        "memory peak: %s of %s", mib(peak), "no limit" if limit == "max" else mib(limit))
 
 
 if __name__ == "__main__":
